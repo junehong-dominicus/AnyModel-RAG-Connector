@@ -3,6 +3,7 @@ import os
 import logging
 import sys
 import requests
+import tiktoken
 
 # Dependencies: pip install streamlit langchain-openai langchain-community faiss-cpu
 from langchain_openai import ChatOpenAI
@@ -41,6 +42,9 @@ def initialize_session_state():
     
     if "models_map" not in st.session_state:
         st.session_state.models_map = get_available_models(st.session_state.base_url)
+
+    if "token_usage" not in st.session_state:
+        st.session_state.token_usage = {"input": 0, "output": 0}
 
 def get_available_models(base_url="http://localhost:1234/v1"):
     """Fetch available models from LM Studio and categorize them."""
@@ -242,6 +246,14 @@ def main():
                 st.info("Vector Store: Active")
         else:
             st.warning("Vector Store: Empty")
+            
+        # Token Usage Display
+        total_tokens = st.session_state.token_usage["input"] + st.session_state.token_usage["output"]
+        st.info(f"Token Usage: {total_tokens} (In: {st.session_state.token_usage['input']}, Out: {st.session_state.token_usage['output']})")
+
+        if st.button("Reset Token Usage", help="Reset the token counter to zero"):
+            st.session_state.token_usage = {"input": 0, "output": 0}
+            st.rerun()
 
         if st.button("Clear Database", help="Permanently remove all ingested documents"):
             st.session_state.vector_db.clear()
@@ -331,6 +343,19 @@ def main():
                 
                 # Save to history
                 st.session_state.messages.append({"role": "assistant", "content": full_response})
+                
+                # Update Token Usage
+                try:
+                    encoder = tiktoken.get_encoding("cl100k_base")
+                    # Approximate input tokens (System + Context + Question)
+                    input_text = f"{system_prompt} {context_text} {prompt}"
+                    input_tokens = len(encoder.encode(input_text))
+                    output_tokens = len(encoder.encode(full_response))
+                    
+                    st.session_state.token_usage["input"] += input_tokens
+                    st.session_state.token_usage["output"] += output_tokens
+                except Exception as e:
+                    logger.warning(f"Failed to count tokens: {e}")
                 
             except Exception as e:
                 st.error(f"Connection Error: {e}")
