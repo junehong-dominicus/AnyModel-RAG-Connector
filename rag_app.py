@@ -215,9 +215,14 @@ def main():
         current_files = st.session_state.vector_db.get_ingested_files()
         if current_files:
             st.markdown(f"**📚 Knowledge Base ({len(current_files)} files)**")
-            with st.expander("View Files"):
+            with st.expander("Manage Files"):
                 for f in current_files:
-                    st.caption(f"• {f}")
+                    col1, col2 = st.columns([4, 1])
+                    col1.caption(f"📄 {f}")
+                    if col2.button("🗑️", key=f"del_{f}", help=f"Delete {f}"):
+                        st.session_state.vector_db.delete_by_metadata(source=f)
+                        st.session_state.vector_db.save()
+                        st.rerun()
         
         st.divider()
         st.subheader("System Status")
