@@ -1,7 +1,11 @@
 {
-    "base_url": "http://localhost:1234/v1",
-    "embedding_model": "text-embedding-embeddinggemma-300m-qat",
-    "llm_model": "meta-llama-3.1-8b-instruct",
+    "base_url": "http://localhost:11434/v1",
+    "embedding_model": "nomic-embed-text:latest",
+    "llm_model": "llama3.2:latest",
     "temperature": 0.7,
-    "system_prompt": "You are a helpful assistant."
+    "system_prompt": "You are a helpful assistant.",
+    "system_prompt_presets": {
+        "Default": "You are a helpful assistant."
+    },
+    "current_preset_name": "Default"
 }

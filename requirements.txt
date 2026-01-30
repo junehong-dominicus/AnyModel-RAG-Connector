@@ -7,3 +7,6 @@ faiss-cpu
 tiktoken
 pypdf
 requests
+scikit-learn
+pandas
+plotly

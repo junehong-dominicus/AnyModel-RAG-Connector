@@ -5,6 +5,7 @@ import sys
 import requests
 import tiktoken
 import json
+import pypdf
 
 # Dependencies: pip install streamlit langchain-openai langchain-community faiss-cpu
 from langchain_openai import ChatOpenAI
@@ -78,7 +79,7 @@ def initialize_session_state():
     if "vector_db" not in st.session_state:
         # Initialize VectorDatabase
         # We use a persistent folder for the index relative to this script
-        safe_name = st.session_state.embedding_model.replace("/", "_").replace("\\", "_")
+        safe_name = st.session_state.embedding_model.replace("/", "_").replace("\\", "_").replace(":", "_").replace(" ", "_")
         index_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"faiss_index_{safe_name}")
         st.session_state.vector_db = VectorDatabase(index_folder=index_path, embedding_model=st.session_state.embedding_model)
         st.session_state.vector_db.load()
@@ -105,7 +106,7 @@ def initialize_session_state():
 def get_available_models(base_url="http://localhost:1234/v1"):
     """Fetch available models from LM Studio and categorize them."""
     try:
-        response = requests.get(f"{base_url.rstrip('/')}/models", timeout=2)
+        response = requests.get(f"{base_url.rstrip('/')}/models", timeout=5)
         if response.status_code == 200:
             data = response.json()
             models = data['data']
@@ -151,7 +152,7 @@ def main():
     initialize_session_state()
     
     st.title("🤖 Local RAG Chat")
-    st.markdown("Chat with your documents using **LM Studio** and **LangChain**.")
+    st.markdown("Chat with your documents.")
 
     # --- Sidebar: Configuration & Ingestion ---
     with st.sidebar:
@@ -333,12 +334,11 @@ def main():
                         
                         if file_ext == ".pdf":
                             try:
-                                import pypdf
                                 pdf_reader = pypdf.PdfReader(file)
                                 for page in pdf_reader.pages:
                                     text += page.extract_text() + "\n"
-                            except ImportError:
-                                st.error("pypdf is required for PDF support. Run: pip install pypdf")
+                            except Exception as e:
+                                st.error(f"Error reading PDF: {e}")
                                 continue
                         else:
                             text = file.getvalue().decode("utf-8")
@@ -393,8 +393,55 @@ def main():
             st.rerun()
 
         if st.button("Clear Database", help="Permanently remove all ingested documents"):
-            st.session_state.vector_db.clear()
+            st.session_state.confirm_clear = True
             st.rerun()
+            
+        if st.session_state.get("confirm_clear"):
+            st.warning("⚠️ Are you sure? This will delete all knowledge.")
+            col_yes, col_no = st.columns(2)
+            if col_yes.button("Yes, Clear All", type="primary"):
+                st.session_state.vector_db.clear()
+                st.session_state.confirm_clear = False
+                st.rerun()
+            if col_no.button("Cancel"):
+                st.session_state.confirm_clear = False
+                st.rerun()
+        
+        with st.expander("Visualize Knowledge Base"):
+            viz_method = st.selectbox("Method", ["PCA", "t-SNE"], key="viz_method")
+            if st.button("Generate Plot"):
+                vectors, metadatas = st.session_state.vector_db.get_all_vectors()
+                if len(vectors) < 3:
+                    st.warning("Not enough data to visualize (need at least 3 chunks).")
+                else:
+                    try:
+                        import pandas as pd
+                        import plotly.express as px
+                        from sklearn.decomposition import PCA
+                        from sklearn.manifold import TSNE
+                        
+                        with st.spinner(f"Calculating {viz_method}..."):
+                            if viz_method == "PCA":
+                                reducer = PCA(n_components=2)
+                            else:
+                                # Perplexity must be less than number of samples
+                                perp = min(30, len(vectors) - 1)
+                                reducer = TSNE(n_components=2, perplexity=perp, random_state=42, init='random')
+                                
+                            projections = reducer.fit_transform(vectors)
+                            
+                            df = pd.DataFrame(projections, columns=["x", "y"])
+                            df["source"] = [m.get("source", "Unknown") for m in metadatas]
+                            df["snippet"] = [m.get("content_snippet", "") for m in metadatas]
+                            
+                            fig = px.scatter(df, x="x", y="y", color="source", hover_data=["snippet"], 
+                                           title=f"Embeddings Projection ({viz_method})")
+                            st.plotly_chart(fig, use_container_width=True)
+                            
+                    except ImportError:
+                        st.error("Missing dependencies. Run: pip install scikit-learn pandas plotly")
+                    except Exception as e:
+                        st.error(f"Visualization error: {e}")
 
         if st.session_state.messages:
             chat_history_text = ""
@@ -471,15 +518,23 @@ def main():
                 prompt_template = ChatPromptTemplate.from_template(template)
                 chain = prompt_template | llm | StrOutputParser()
                 
+                # Add placeholder for stop button
+                stop_btn_placeholder = st.empty()
+                if stop_btn_placeholder.button("Stop Generation", key="stop_gen"):
+                    st.stop()
+
+                # Add empty message to history to capture partial response
+                st.session_state.messages.append({"role": "assistant", "content": ""})
+                
                 # Stream the response
                 for chunk in chain.stream({"context": context_text, "question": prompt}):
                     full_response += chunk
                     response_placeholder.markdown(full_response + "▌")
+                    # Update history with partial response
+                    st.session_state.messages[-1]["content"] = full_response
                 
                 response_placeholder.markdown(full_response)
-                
-                # Save to history
-                st.session_state.messages.append({"role": "assistant", "content": full_response})
+                stop_btn_placeholder.empty()
                 
                 # Update Token Usage
                 try:

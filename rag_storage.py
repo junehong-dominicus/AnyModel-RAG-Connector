@@ -81,7 +81,7 @@ class VectorDatabase:
             )
             logger.info(f"Vector store loaded from '{self.index_folder}'")
         else:
-            logger.warning(f"No vector store found at '{self.index_folder}'")
+            logger.info(f"No vector store found at '{self.index_folder}'. A new one will be created upon ingestion.")
 
     def search(self, query: str, k: int = 3) -> List[Document]:
         """Retrieve similar documents."""
@@ -142,6 +142,40 @@ class VectorDatabase:
             self.vector_store.delete(ids)
             logger.info(f"Cleared {len(ids)} documents.")
             self.save()
+
+    def get_all_vectors(self) -> tuple:
+        """Retrieve all vectors and their corresponding metadata."""
+        if not self.vector_store:
+            return [], []
+            
+        try:
+            # Access the underlying FAISS index
+            index = self.vector_store.index
+            ntotal = index.ntotal
+            
+            if ntotal == 0:
+                return [], []
+                
+            # Reconstruct vectors (works for IndexFlatL2, which is default)
+            vectors = index.reconstruct_n(0, ntotal)
+            
+            # Get metadata
+            metadatas = []
+            for i in range(ntotal):
+                doc_id = self.vector_store.index_to_docstore_id.get(i)
+                if doc_id:
+                    doc = self.vector_store.docstore.search(doc_id)
+                    meta = doc.metadata.copy() if doc.metadata else {}
+                    meta['content_snippet'] = doc.page_content[:100] + "..." if doc.page_content else ""
+                    metadatas.append(meta)
+                else:
+                    metadatas.append({})
+                    
+            return vectors, metadatas
+            
+        except Exception as e:
+            logger.error(f"Error retrieving vectors: {e}")
+            return [], []
 
 if __name__ == "__main__":
     # Quick verification
