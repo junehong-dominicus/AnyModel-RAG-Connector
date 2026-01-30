@@ -12,3 +12,30 @@ Key capabilities include:
 - Developer‑friendly architecture for experimentation and production use
 
 AnyModel‑RAG‑Connector is built for developers who want freedom: freedom to choose models, swap providers, and evolve their RAG stack without vendor lock‑in.
+
+## How to Run
+
+### Prerequisites
+
+1.  **Python 3.8+**
+2.  **LLM Backend**:
+    *   **LM Studio**: Start the local server on port `1234`.
+    *   **Ollama**: Ensure the service is running (default port `11434`).
+
+### Installation
+
+1.  Clone the repository and navigate to the project folder.
+
+2.  Install dependencies:
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+### Usage
+
+1.  Run the Streamlit application:
+    ```bash
+    streamlit run rag_app.py
+    ```
+
+2.  Open your browser at `http://localhost:8501`. Configure your server settings in the sidebar and start chatting with your documents.
