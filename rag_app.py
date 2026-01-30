@@ -25,7 +25,7 @@ except ImportError:
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-st.set_page_config(page_title="RAG Chat with LM Studio", page_icon="🤖", layout="wide")
+st.set_page_config(page_title="RAG Chat with Your Documents.", page_icon="🤖", layout="wide")
 
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
 
