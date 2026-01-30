@@ -119,6 +119,19 @@ class VectorDatabase:
             
         return ids_to_delete
 
+    def get_ingested_files(self) -> List[str]:
+        """Retrieve a list of unique source filenames from the vector store."""
+        if not self.vector_store:
+            return []
+            
+        sources = set()
+        # Accessing internal docstore to get metadata
+        for doc in self.vector_store.docstore._dict.values():
+            if "source" in doc.metadata:
+                sources.add(doc.metadata["source"])
+                
+        return sorted(list(sources))
+
     def clear(self):
         """Clear all documents from the vector store."""
         if not self.vector_store:

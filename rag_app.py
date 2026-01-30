@@ -211,6 +211,14 @@ def main():
                     st.session_state.vector_db.save()
                     st.success(f"Successfully ingested {count} files!")
         
+        # Display currently ingested files
+        current_files = st.session_state.vector_db.get_ingested_files()
+        if current_files:
+            st.markdown(f"**📚 Knowledge Base ({len(current_files)} files)**")
+            with st.expander("View Files"):
+                for f in current_files:
+                    st.caption(f"• {f}")
+        
         st.divider()
         st.subheader("System Status")
         if st.session_state.vector_db.vector_store:
