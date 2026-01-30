@@ -178,7 +178,14 @@ def main():
                 total_files = len(uploaded_files)
                 count = 0
                 
+                existing_files = st.session_state.vector_db.get_ingested_files()
+                
                 for i, file in enumerate(uploaded_files):
+                    if file.name in existing_files:
+                        st.warning(f"Skipping {file.name} - already exists.")
+                        progress_bar.progress((i + 1) / total_files, text=f"Skipped {file.name} ({i+1}/{total_files})")
+                        continue
+
                     try:
                         file_ext = os.path.splitext(file.name)[1].lower()
                         text = ""
