@@ -235,6 +235,18 @@ def main():
             st.session_state.vector_db.clear()
             st.rerun()
 
+        if st.session_state.messages:
+            chat_history_text = ""
+            for msg in st.session_state.messages:
+                chat_history_text += f"{msg['role'].upper()}:\n{msg['content']}\n\n"
+            
+            st.download_button(
+                label="💾 Export Chat History",
+                data=chat_history_text,
+                file_name="chat_history.txt",
+                mime="text/plain"
+            )
+
         if st.button("Clear Chat History"):
             st.session_state.messages = []
             st.rerun()
