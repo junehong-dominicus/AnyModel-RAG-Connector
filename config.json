@@ -1,0 +1,7 @@
+{
+    "base_url": "http://localhost:1234/v1",
+    "embedding_model": "text-embedding-embeddinggemma-300m-qat",
+    "llm_model": "meta-llama-3.1-8b-instruct",
+    "temperature": 0.7,
+    "system_prompt": "You are a helpful assistant."
+}

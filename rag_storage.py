@@ -18,13 +18,13 @@ class VectorDatabase:
     Manages storage and retrieval of text chunks using FAISS and local embeddings.
     """
     
-    def __init__(self, index_folder: str = "faiss_index"):
+    def __init__(self, index_folder: str = "faiss_index", embedding_model: str = "text-embedding-embeddinggemma-300m-qat"):
         self.index_folder = index_folder
         
         # Initialize our custom components
         self.chunker = ContentChunker()
         # Use the specific model you requested
-        self.embedder = LocalEmbedder(model_name="text-embedding-embeddinggemma-300m-qat")
+        self.embedder = LocalEmbedder(model_name=embedding_model)
         
         self.vector_store = None
 

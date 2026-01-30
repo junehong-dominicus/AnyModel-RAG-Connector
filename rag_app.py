@@ -4,6 +4,7 @@ import logging
 import sys
 import requests
 import tiktoken
+import json
 
 # Dependencies: pip install streamlit langchain-openai langchain-community faiss-cpu
 from langchain_openai import ChatOpenAI
@@ -25,26 +26,81 @@ logger = logging.getLogger(__name__)
 
 st.set_page_config(page_title="RAG Chat with LM Studio", page_icon="🤖", layout="wide")
 
+CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+
+def load_config():
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, "r") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"Failed to load config: {e}")
+    return {}
+
+def save_config():
+    config = {
+        "base_url": st.session_state.get("base_url"),
+        "embedding_model": st.session_state.get("embedding_model"),
+        "llm_model": st.session_state.get("llm_model"),
+        "temperature": st.session_state.get("temperature"),
+        "system_prompt": st.session_state.get("system_prompt"),
+        "system_prompt_presets": st.session_state.get("system_prompt_presets"),
+        "current_preset_name": st.session_state.get("current_preset_name")
+    }
+    try:
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(config, f, indent=4)
+    except Exception as e:
+        logger.error(f"Failed to save config: {e}")
+
 def initialize_session_state():
     """Initialize session state variables."""
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-    
-    if "vector_db" not in st.session_state:
-        # Initialize VectorDatabase
-        # We use a persistent folder for the index relative to this script
-        index_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "faiss_index")
-        st.session_state.vector_db = VectorDatabase(index_folder=index_path)
-        st.session_state.vector_db.load()
-    
+    config = load_config()
+
     if "base_url" not in st.session_state:
-        st.session_state.base_url = "http://localhost:1234/v1"
+        st.session_state.base_url = config.get("base_url", "http://localhost:1234/v1")
     
     if "models_map" not in st.session_state:
         st.session_state.models_map = get_available_models(st.session_state.base_url)
 
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+    
+    if "embedding_model" not in st.session_state:
+        st.session_state.embedding_model = config.get("embedding_model")
+        if not st.session_state.embedding_model:
+            embed_models = st.session_state.models_map.get("Embedding Model", [])
+            if embed_models:
+                st.session_state.embedding_model = embed_models[0]["id"]
+            else:
+                st.session_state.embedding_model = "text-embedding-embeddinggemma-300m-qat"
+
+    if "vector_db" not in st.session_state:
+        # Initialize VectorDatabase
+        # We use a persistent folder for the index relative to this script
+        safe_name = st.session_state.embedding_model.replace("/", "_").replace("\\", "_")
+        index_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"faiss_index_{safe_name}")
+        st.session_state.vector_db = VectorDatabase(index_folder=index_path, embedding_model=st.session_state.embedding_model)
+        st.session_state.vector_db.load()
+
     if "token_usage" not in st.session_state:
         st.session_state.token_usage = {"input": 0, "output": 0}
+
+    if "llm_model" not in st.session_state:
+        st.session_state.llm_model = config.get("llm_model")
+        
+    if "temperature" not in st.session_state:
+        st.session_state.temperature = config.get("temperature", 0.7)
+        
+    if "system_prompt_presets" not in st.session_state:
+        st.session_state.system_prompt_presets = config.get("system_prompt_presets", {"Default": "You are a helpful assistant."})
+
+    if "current_preset_name" not in st.session_state:
+        st.session_state.current_preset_name = config.get("current_preset_name", "Default")
+
+    if "system_prompt" not in st.session_state:
+        # Sync with current preset
+        st.session_state.system_prompt = st.session_state.system_prompt_presets.get(st.session_state.current_preset_name, "You are a helpful assistant.")
 
 def get_available_models(base_url="http://localhost:1234/v1"):
     """Fetch available models from LM Studio and categorize them."""
@@ -104,49 +160,85 @@ def main():
         # Server Selection
         server_type = st.selectbox("Server Type", ["LM Studio", "Ollama", "Custom"], index=0)
         
-        if server_type == "LM Studio":
-            st.session_state.base_url = "http://localhost:1234/v1"
-            new_base_url = st.text_input("Base URL", value=st.session_state.base_url)
-        elif server_type == "Ollama":
-            st.session_state.base_url = "http://localhost:11434/v1"
-            new_base_url = st.text_input("Base URL", value=st.session_state.base_url)
-        else:
-            new_base_url = st.text_input("Base URL", value=st.session_state.base_url)
+        col_url, col_btn = st.columns([5, 1], vertical_alignment="bottom")
+        with col_url:
+            if server_type == "LM Studio":
+                st.session_state.base_url = "http://localhost:1234/v1"
+                new_base_url = st.text_input("Base URL", value=st.session_state.base_url)
+            elif server_type == "Ollama":
+                st.session_state.base_url = "http://localhost:11434/v1"
+                new_base_url = st.text_input("Base URL", value=st.session_state.base_url)
+            else:
+                new_base_url = st.text_input("Base URL", value=st.session_state.base_url)
+
+        with col_btn:
+            if st.button("🔄", help="Refresh Models"):
+                st.session_state.models_map = get_available_models(st.session_state.base_url)
+                st.rerun()
             
         if new_base_url != st.session_state.base_url:
             st.session_state.base_url = new_base_url
             st.session_state.models_map = get_available_models(new_base_url)
+            save_config()
             st.rerun()
         
         models_map = st.session_state.models_map
-        categories = list(models_map.keys())
         
-        col1, col2 = st.columns([5, 1], vertical_alignment="bottom")
-        with col1:
-            if categories:
-                selected_category = st.selectbox("Model Category", categories, index=0)
-            else:
-                selected_category = st.selectbox("Model Category", ["None"], index=0)
-        with col2:
-            if st.button("🔄", help="Refresh Models"):
-                st.session_state.models_map = get_available_models(st.session_state.base_url)
+        # Model Selection
+        st.subheader("Embedding")
+        embed_models = models_map.get("Embedding Model", [])
+        if embed_models:
+            embed_options = {m["name"]: m["id"] for m in embed_models}
+            
+            # Find current selection index
+            current_id = st.session_state.embedding_model
+            current_name = next((k for k, v in embed_options.items() if v == current_id), list(embed_options.keys())[0])
+            
+            selected_embed_name = st.selectbox("Select Embedding Model", list(embed_options.keys()), index=list(embed_options.keys()).index(current_name), key="embed_model_select")
+            selected_embed_id = embed_options[selected_embed_name]
+            
+            if selected_embed_id != st.session_state.embedding_model:
+                st.session_state.embedding_model = selected_embed_id
+                # Re-initialize DB with new model path
+                st.session_state.pop("vector_db")
+                save_config()
                 st.rerun()
+            
+            # Embedding Metadata
+            selected_embed_item = next((m for m in embed_models if m["id"] == selected_embed_id), None)
+            if selected_embed_item and "details" in selected_embed_item:
+                with st.expander("ℹ️ Embedding Metadata"):
+                    st.caption(f"**Full ID:** {selected_embed_id}")
+                    st.json(selected_embed_item["details"])
+
+        st.subheader("LLM")
+        llm_models = []
+        for category, models in models_map.items():
+            if category != "Embedding Model":
+                llm_models.extend(models)
         
-        # Filter models by category
-        if selected_category and selected_category != "None":
-            category_models = models_map.get(selected_category, [])
-            model_options = {m["name"]: m["id"] for m in category_models}
-        else:
-            model_options = {}
+        model_options = {m["name"]: m["id"] for m in llm_models}
         
         if model_options:
-            selected_model_name = st.selectbox("Select Model", list(model_options.keys()), index=0)
+            # Determine index based on saved config
+            current_llm_id = st.session_state.get("llm_model")
+            current_index = 0
+            if current_llm_id:
+                current_name = next((k for k, v in model_options.items() if v == current_llm_id), None)
+                if current_name:
+                    current_index = list(model_options.keys()).index(current_name)
+
+            selected_model_name = st.selectbox("Select LLM Model", list(model_options.keys()), index=current_index)
             selected_model = model_options[selected_model_name]
             
+            if selected_model != st.session_state.get("llm_model"):
+                st.session_state.llm_model = selected_model
+                save_config()
+            
             # Display Model Metadata
-            selected_item = next((m for m in category_models if m["id"] == selected_model), None)
+            selected_item = next((m for m in llm_models if m["id"] == selected_model), None)
             if selected_item and "details" in selected_item:
-                with st.expander("ℹ️ Model Metadata"):
+                with st.expander("ℹ️ LLM Metadata"):
                     st.caption(f"**Full ID:** {selected_model}")
                     st.json(selected_item["details"])
         else:
@@ -157,15 +249,60 @@ def main():
             "Temperature",
             min_value=0.0,
             max_value=1.0,
-            value=0.7,
+            value=st.session_state.temperature,
             step=0.1
         )
+        if temperature != st.session_state.temperature:
+            st.session_state.temperature = temperature
+            save_config()
         
+        st.subheader("System Prompt")
+        
+        # Preset Selection
+        presets = st.session_state.system_prompt_presets
+        current_preset = st.session_state.current_preset_name
+        
+        # Fallback if current preset is missing
+        if current_preset not in presets:
+            current_preset = "Default"
+            if "Default" not in presets:
+                presets["Default"] = "You are a helpful assistant."
+            st.session_state.current_preset_name = current_preset
+            
+        selected_preset = st.selectbox("Preset", list(presets.keys()), index=list(presets.keys()).index(current_preset))
+        
+        if selected_preset != st.session_state.current_preset_name:
+            st.session_state.current_preset_name = selected_preset
+            st.session_state.system_prompt = presets[selected_preset]
+            save_config()
+            st.rerun()
+
         system_prompt = st.text_area(
-            "System Prompt",
-            value="You are a helpful assistant.",
+            "Prompt Content",
+            value=st.session_state.system_prompt,
             help="Customize the behavior and persona of the AI assistant."
         )
+        if system_prompt != st.session_state.system_prompt:
+            st.session_state.system_prompt = system_prompt
+            st.session_state.system_prompt_presets[selected_preset] = system_prompt
+            save_config()
+            
+        with st.expander("Manage Presets"):
+            new_preset_name = st.text_input("New Preset Name")
+            col_add, col_del = st.columns(2)
+            if col_add.button("Save New"):
+                if new_preset_name and new_preset_name not in presets:
+                    st.session_state.system_prompt_presets[new_preset_name] = system_prompt
+                    st.session_state.current_preset_name = new_preset_name
+                    save_config()
+                    st.rerun()
+            if col_del.button("Delete Current"):
+                if selected_preset != "Default":
+                    del st.session_state.system_prompt_presets[selected_preset]
+                    st.session_state.current_preset_name = "Default"
+                    st.session_state.system_prompt = st.session_state.system_prompt_presets["Default"]
+                    save_config()
+                    st.rerun()
         
         st.divider()
         st.header("📂 Document Management")
