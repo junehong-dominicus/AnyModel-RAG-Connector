@@ -1,5 +1,6 @@
 import logging
 import os
+import shutil
 import uuid
 from typing import List, Optional, Dict
 
@@ -18,13 +19,13 @@ class VectorDatabase:
     Manages storage and retrieval of text chunks using FAISS and local embeddings.
     """
     
-    def __init__(self, index_folder: str = "faiss_index", embedding_model: str = "text-embedding-embeddinggemma-300m-qat"):
+    def __init__(self, index_folder: str = "faiss_index", embedding_model: str = "text-embedding-embeddinggemma-300m-qat", base_url: str = "http://localhost:1234/v1"):
         self.index_folder = index_folder
         
         # Initialize our custom components
         self.chunker = ContentChunker()
         # Use the specific model you requested
-        self.embedder = LocalEmbedder(model_name=embedding_model)
+        self.embedder = LocalEmbedder(model_name=embedding_model, base_url=base_url)
         
         self.vector_store = None
 
@@ -137,11 +138,14 @@ class VectorDatabase:
         if not self.vector_store:
             return
             
-        ids = list(self.vector_store.docstore._dict.keys())
-        if ids:
-            self.vector_store.delete(ids)
-            logger.info(f"Cleared {len(ids)} documents.")
-            self.save()
+        try:
+            shutil.rmtree(self.index_folder, ignore_errors=True)
+            logger.info(f"Deleted vector store directory: {self.index_folder}")
+        except Exception as e:
+            logger.error(f"Failed to delete vector store directory: {e}")
+
+        self.vector_store = None
+        logger.info("Cleared all documents.")
 
     def get_all_vectors(self) -> tuple:
         """Retrieve all vectors and their corresponding metadata."""

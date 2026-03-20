@@ -81,7 +81,7 @@ def initialize_session_state():
         # We use a persistent folder for the index relative to this script
         safe_name = st.session_state.embedding_model.replace("/", "_").replace("\\", "_").replace(":", "_").replace(" ", "_")
         index_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"faiss_index_{safe_name}")
-        st.session_state.vector_db = VectorDatabase(index_folder=index_path, embedding_model=st.session_state.embedding_model)
+        st.session_state.vector_db = VectorDatabase(index_folder=index_path, embedding_model=st.session_state.embedding_model, base_url=st.session_state.base_url)
         st.session_state.vector_db.load()
 
     if "token_usage" not in st.session_state:
@@ -180,6 +180,7 @@ def main():
         if new_base_url != st.session_state.base_url:
             st.session_state.base_url = new_base_url
             st.session_state.models_map = get_available_models(new_base_url)
+            st.session_state.pop("vector_db", None)
             save_config()
             st.rerun()
         
@@ -336,7 +337,8 @@ def main():
                             try:
                                 pdf_reader = pypdf.PdfReader(file)
                                 for page in pdf_reader.pages:
-                                    text += page.extract_text() + "\n"
+                                    extracted = page.extract_text()
+                                    text += (extracted or "") + "\n"
                             except Exception as e:
                                 st.error(f"Error reading PDF: {e}")
                                 continue
