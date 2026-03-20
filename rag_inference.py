@@ -12,21 +12,26 @@ from rag_storage import VectorDatabase
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def run_rag_pipeline(question: str):
+def run_rag_pipeline(
+    question: str,
+    base_url: str = "http://localhost:1234/v1",
+    model_name: str = "local-model",
+    embedding_model: str = "text-embedding-embeddinggemma-300m-qat"
+):
     """
     Combines VectorDatabase retrieval with LLM generation.
     """
     # 1. Initialize and Load Vector Database
     # This loads the FAISS index we created in the previous step
-    db = VectorDatabase()
+    db = VectorDatabase(base_url=base_url, embedding_model=embedding_model)
     db.load()
 
     # 2. Initialize Local LLM (LM Studio)
     # Ensure you have a chat model loaded in LM Studio (e.g., Gemma, Llama 3, Mistral)
     llm = ChatOpenAI(
-        base_url="http://localhost:1234/v1",
+        base_url=base_url,
         api_key="lm-studio",
-        model="local-model", # meta-llama-3.1-8b-instruct, The model name often doesn't matter for local server, but can be specific
+        model=model_name, # meta-llama-3.1-8b-instruct, The model name often doesn't matter for local server, but can be specific
         temperature=0.7
     )
 
